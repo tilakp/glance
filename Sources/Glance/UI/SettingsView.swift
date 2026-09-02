@@ -219,6 +219,18 @@ private struct GeneralTab: View {
                 Toggle("Reduce motion", isOn: $settings.reduceMotion)
             }
 
+            Section {
+                Picker("Break appearance", selection: $settings.breakAppearance) {
+                    ForEach(BreakAppearance.allCases) { choice in
+                        Text(choice.label).tag(choice)
+                    }
+                }
+            } footer: {
+                Text("Strain comes from the size of the jump in brightness, not from the colour itself, so the break sits close to whatever the room already is: light by day, dark at night.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Privacy") {
                 Text("Glance never records your camera, microphone, screen, or meetings, and nothing leaves your Mac. To know when to stay quiet it checks three things: whether any camera is switched on, which app is in front, and the size and layer of on-screen windows - enough to spot a slideshow or a screen share, never their contents.")
                     .font(.callout)

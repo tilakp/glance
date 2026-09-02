@@ -105,6 +105,14 @@ final class GlanceSettings: ObservableObject {
         reduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
+    /// Which break palette to use. Following the system is the default,
+    /// because the point is to sit close to the room's brightness rather than
+    /// to always be dark.
+    var breakAppearance: BreakAppearance {
+        get { BreakAppearance(rawValue: store.string(forKey: "breakAppearance") ?? "") ?? .system }
+        set { write(newValue.rawValue, "breakAppearance") }
+    }
+
     /// Set while the user has asked for quiet until a given time.
     var pausedUntil: Date? {
         get {
@@ -137,4 +145,31 @@ final class GlanceSettings: ObservableObject {
         "com.microsoft.teams2",
         "com.apple.iWork.Keynote",
     ]
+}
+
+
+enum BreakAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "Match the system"
+        case .light: return "Always light"
+        case .dark: return "Always dark"
+        }
+    }
+
+    /// Resolved against the current system appearance.
+    var palette: RestPalette {
+        switch self {
+        case .light: return .light
+        case .dark: return .dark
+        case .system:
+            let isDark = NSApp.effectiveAppearance
+                .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return isDark ? .dark : .light
+        }
+    }
 }

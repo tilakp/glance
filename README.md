@@ -7,6 +7,8 @@ A calm eye-break reminder for macOS. It lives in the menu bar, follows the
 
 ![A break running, counting down](docs/break-running.png)
 
+![The same break in dark appearance](docs/break-dark.png)
+
 ## Install
 
 ```bash
@@ -20,10 +22,8 @@ on **Settings → General → Start Glance at login**.
 ## Using it
 
 Every 20 minutes Glance offers a 20-second break and fills the screen with a
-dim green horizon. Green rather than the app's indigo, because the overlay
-covers a whole display: it sits at the peak of luminous sensitivity, so it
-reads clearly while staying dark, and avoids the short wavelengths that leave
-the eye hunting for focus.
+soft green horizon — light by day, dark at night, following your system
+appearance. See [why green, and why it changes](#why-it-looks-like-that).
 
 - **Return** starts the break, **Esc** skips it. Untouched, it starts on its own
   after 10 seconds, so it still works if you have already walked away.
@@ -32,6 +32,34 @@ the eye hunting for focus.
 - On several displays, the one under your pointer gets the controls; the rest
   show a still backdrop.
 - Honours the system Reduce Motion setting, not just its own.
+
+## Why it looks like that
+
+The break fills a whole display, so the palette is taken from the visual
+ergonomics literature rather than from branding.
+
+**Match the room rather than fight it.** Comfort guidance puts the
+screen-to-surround luminance ratio at [around 3:1 or under](https://us.ktcplay.com/blogs/support-tips/ergonomic-brightness-monitor-contrast-eye-comfort):
+the strain is in the size of the adaptation jump, in either direction. A
+near-black overlay is a big jump for someone working in a lit room, so Glance
+follows the system appearance instead of always going dark.
+
+**Light beats dark for most eyes.** A dark field dilates the pupil and admits
+more optical aberration; NN/g found [positive polarity won on every dimension,
+with reading speed dropping up to 26% on negative polarity](https://www.nngroup.com/articles/dark-mode/),
+and light-on-dark text haloes for the 30–50% of adults with astigmatism. Dark
+wins in a genuinely dim room — which is when the system is already in dark mode.
+
+**Green specifically.** A [2025 reading study](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2025.1627013/full)
+found a light green ground raised pupil diameter — a marker of *lower* fatigue —
+lowered negative affect, and improved reading performance against white.
+
+**Not because of blue light.** A [2023 Cochrane review of 17 trials](https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD013244.pub2/full)
+found blue-filtering lenses make no reliable difference to eye strain. The
+mechanisms that do matter are [reduced blinking and sustained near focus](https://pmc.ncbi.nlm.nih.gov/articles/PMC9434525/),
+which is what looking into the distance and blinking deliberately are for.
+
+Override it under **Settings → General → Break appearance**.
 
 ## Smart Pause
 
