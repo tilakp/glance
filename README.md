@@ -12,12 +12,16 @@ A calm eye-break reminder for macOS. It lives in the menu bar, follows the
 ## Install
 
 ```bash
-./build.sh && open build/Glance.app
+./build.sh && open /Applications/Glance.app
 ```
 
+`build.sh` installs to `/Applications`, which is where the app has to live for
+**Settings → General → Start Glance at login** to keep working. If a copy is
+already running it is quit, replaced, and relaunched. No `sudo` needed on a
+normal admin account; the staged build is left in `build/` if you want it.
+
 macOS 14+. No Dock icon, no windows — just a ring in the menu bar that fills as
-screen time adds up. To keep it, move `Glance.app` to `/Applications` and turn
-on **Settings → General → Start Glance at login**.
+screen time adds up.
 
 ## Using it
 

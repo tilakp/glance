@@ -1,10 +1,12 @@
 #!/bin/bash
-# Builds Glance.app from the SwiftPM executable.
+# Builds Glance.app from the SwiftPM executable and installs it to
+# /Applications, which is where a login item has to point to survive.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$ROOT/build"
 APP="$BUILD/Glance.app"
+INSTALLED="/Applications/Glance.app"
 
 echo "==> Compiling"
 swift build -c release --package-path "$ROOT"
@@ -46,4 +48,42 @@ PLIST
 echo "==> Signing (ad-hoc)"
 codesign --force --sign - "$APP" 2>/dev/null
 
-echo "==> Built $APP"
+echo "==> Installing to $INSTALLED"
+if [ ! -w /Applications ]; then
+    echo "    /Applications is not writable by $(whoami)."
+    echo "    Re-run with: sudo $0"
+    exit 1
+fi
+
+# Note whether it was already running, so the install does not silently
+# leave the user without the app they had a moment ago.
+WAS_RUNNING=no
+if pgrep -x Glance > /dev/null; then
+    WAS_RUNNING=yes
+    echo "    Quitting the running copy"
+    killall Glance 2>/dev/null || true
+    for _ in $(seq 1 20); do
+        pgrep -x Glance > /dev/null || break
+        sleep 0.25
+    done
+fi
+
+# Guarded: this is an rm -rf against a system directory, so refuse anything
+# that is not exactly the bundle we mean to replace.
+if [ -e "$INSTALLED" ]; then
+    case "$INSTALLED" in
+        /Applications/Glance.app) rm -rf "$INSTALLED" ;;
+        *) echo "    Refusing to remove $INSTALLED"; exit 1 ;;
+    esac
+fi
+cp -R "$APP" "$INSTALLED"
+# Re-sign in place: copying can disturb the bundle's seal.
+codesign --force --sign - "$INSTALLED" 2>/dev/null
+
+if [ "$WAS_RUNNING" = yes ]; then
+    echo "    Relaunching"
+    open "$INSTALLED"
+fi
+
+echo "==> Installed $INSTALLED"
+echo "    (staged copy left at $APP)"
