@@ -35,28 +35,28 @@ enum PresentationMonitor {
 
         let ownPID = Int(ProcessInfo.processInfo.processIdentifier)
 
-        // Build the pid -> policy map once. Constructing an NSRunningApplication
-        // per candidate window costs a synchronous launchservicesd round trip
-        // each time, and several windows usually share one owning process.
-        var policies: [Int: NSApplication.ActivationPolicy] = [:]
-        for app in NSWorkspace.shared.runningApplications {
-            policies[Int(app.processIdentifier)] = app.activationPolicy
-        }
-
+        // Checking bounds first, before looking up the owning app, means the
+        // common case (no full-display window at all) never has to touch
+        // NSRunningApplication - constructing one is a synchronous
+        // launchservicesd round trip, and this runs every couple of seconds
+        // for the life of the app.
         for window in windows {
             let layer = window[kCGWindowLayer as String] as? Int ?? 0
             guard layer > 0 else { continue }
 
             let pid = window[kCGWindowOwnerPID as String] as? Int ?? 0
-            guard pid != ownPID, policies[pid] == .regular else { continue }
+            guard pid != ownPID else { continue }
 
             guard let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
-                  let width = bounds["Width"], let height = bounds["Height"]
+                  let width = bounds["Width"], let height = bounds["Height"],
+                  displays.contains(where: { covers(width: width, height: height, of: $0) })
             else { continue }
 
-            if displays.contains(where: { covers(width: width, height: height, of: $0) }) {
-                return true
-            }
+            guard let app = NSRunningApplication(processIdentifier: pid_t(pid)),
+                  app.activationPolicy == .regular
+            else { continue }
+
+            return true
         }
         return false
     }
