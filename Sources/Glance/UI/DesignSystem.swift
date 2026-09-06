@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// A plain once-a-second clock, started and stopped by whoever actually
+/// knows when the view using it is on screen.
+///
+/// Two things that look like they should answer "is this view visible"
+/// measurably do not: `TimelineView` keeps firing even while the
+/// `MenuBarExtra(.window)` popover is closed, and so do `onAppear`/
+/// `onDisappear` attached inside that same popover's content - measured on
+/// this machine (macOS 26), the popover's window is never destroyed and
+/// closing it only flips `NSWindow.occlusionState`, which neither of those
+/// APIs observes. See `AppCore.observePopoverVisibility()` for the popover's
+/// actual visibility source; the break overlay's own window is created and
+/// destroyed for real by `OverlayController`, so `onAppear`/`onDisappear`
+/// work there.
+@MainActor
+final class VisibleClock: ObservableObject {
+    @Published private(set) var now = Date()
+    private var timer: Timer?
+
+    func start() {
+        guard timer == nil else { return }
+        let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.now = Date() }
+        }
+        t.tolerance = 0.1
+        timer = t
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
 /// Glance's focus identity: indigo → violet → lavender, never alarm red.
 /// Used for the app icon, the menu bar ring and the popover.
 enum Palette {

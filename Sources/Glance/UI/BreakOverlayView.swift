@@ -12,6 +12,7 @@ struct BreakOverlayView: View {
     var isPrimary: Bool
 
     @State private var appeared = false
+    @StateObject private var clock = VisibleClock()
 
     /// Motion is suppressed for the system-wide accessibility setting as well
     /// as Glance's own, and on displays that carry no content: a full-screen
@@ -106,8 +107,13 @@ struct BreakOverlayView: View {
 
     // MARK: Break running
 
+    /// `breakRemaining` is not published at 1Hz any more (BreakEngine.swift),
+    /// so the countdown drives its own clock here, started and stopped as
+    /// this body actually appears and disappears.
     private var inProgress: some View {
         VStack(spacing: 0) {
+            let _ = clock.now
+
             Image(systemName: engine.activity.symbol)
                 .font(.system(size: 40, weight: .ultraLight))
                 .foregroundStyle(palette.accent)
@@ -145,6 +151,8 @@ struct BreakOverlayView: View {
                 .keyboardShortcut(.cancelAction)
                 .padding(.top, 40)
         }
+        .onAppear { clock.start() }
+        .onDisappear { clock.stop() }
     }
 
     // MARK: Completion

@@ -7,6 +7,10 @@ struct PopoverView: View {
     @ObservedObject var settings: GlanceSettings
     @ObservedObject var log: SessionLog
 
+    /// Owned by `AppCore`, not by this view: see `VisibleClock`'s doc comment
+    /// for why this popover's own visibility hooks cannot drive it.
+    @ObservedObject var clock: VisibleClock
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -51,8 +55,13 @@ struct PopoverView: View {
         }
     }
 
+    /// `focusElapsed`/`timeUntilBreak` are not published at 1Hz any more
+    /// (BreakEngine.swift), so the countdown re-renders off `clock` instead,
+    /// which `AppCore` starts and stops as the popover truly opens and closes.
     private var focusBody: some View {
         VStack(spacing: 0) {
+            let _ = clock.now
+
             FocusRing(progress: engine.progress)
                 .frame(width: 92, height: 92)
 

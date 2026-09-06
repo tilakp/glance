@@ -28,10 +28,26 @@ enum GlancePhase: Equatable {
 @MainActor
 final class BreakEngine: ObservableObject {
 
+    /// The pieces of state that change the menu bar icon's pixels. `phase`
+    /// changes are rare and already published; bucketing progress into whole
+    /// degrees and comparing before publishing means the icon's one
+    /// SwiftUI-observed trigger fires a few times a minute instead of every
+    /// second, without changing what the icon looks like.
+    private struct IconState: Equatable {
+        let progressStep: Int
+        let phase: GlancePhase
+    }
+
     @Published private(set) var phase: GlancePhase = .focusing
-    @Published private(set) var focusElapsed: TimeInterval = 0
-    @Published private(set) var breakRemaining: TimeInterval = 0
+    @Published private var iconState = IconState(progressStep: 0, phase: .focusing)
     @Published private(set) var activity: BreakActivity = BreakActivity.all[0]
+
+    /// Not published: these change every second while focusing or breaking,
+    /// and nothing needs a SwiftUI update at that cadence while off screen.
+    /// The popover and the break overlay read them through their own
+    /// `TimelineView`, which only ticks while they are actually visible.
+    private(set) var focusElapsed: TimeInterval = 0
+    private(set) var breakRemaining: TimeInterval = 0
 
     private let settings: GlanceSettings
     private let context: ContextEngine
@@ -85,13 +101,33 @@ final class BreakEngine: ObservableObject {
         return 1 - min(breakRemaining / settings.breakDuration, 1)
     }
 
+    // MARK: State changes
+
+    /// Only publishes when the phase actually differs, so holding a phase
+    /// across ticks (Smart Pause, an offered break waiting to auto-start)
+    /// does not trigger a SwiftUI update every second.
+    private func setPhase(_ newPhase: GlancePhase) {
+        guard phase != newPhase else { return }
+        phase = newPhase
+    }
+
+    /// Call after anything that might have moved `phase` or `focusElapsed`,
+    /// so the menu bar icon's one published trigger stays in sync.
+    private func refreshIconState() {
+        let step = Int((progress * 360).rounded())
+        let state = IconState(progressStep: step, phase: phase)
+        guard state != iconState else { return }
+        iconState = state
+    }
+
     // MARK: User actions
 
     /// Begin the break the overlay is offering, or one the user asked for.
     func beginBreak() {
         pickNextActivity()
         breakRemaining = settings.breakDuration
-        phase = .breaking
+        setPhase(.breaking)
+        refreshIconState()
     }
 
     /// Bring a break forward from the menu bar. Ignored when a break is
@@ -116,20 +152,22 @@ final class BreakEngine: ObservableObject {
     /// "Skip for now" — no guilt, no immediate re-ask.
     func skip() {
         focusElapsed = 0
-        phase = .focusing
+        setPhase(.focusing)
+        refreshIconState()
     }
 
     /// "5 more minutes".
     func snooze() {
         focusElapsed = max(settings.focusInterval - settings.snoozeDuration, 0)
-        phase = .focusing
+        setPhase(.focusing)
+        refreshIconState()
     }
 
     private func finishBreak() {
         log.recordCompletedBreak()
         focusElapsed = 0
         completeUntil = Date().addingTimeInterval(2.5)
-        phase = .complete
+        setPhase(.complete)
     }
 
     private func pickNextActivity() {
@@ -152,11 +190,16 @@ final class BreakEngine: ObservableObject {
         lastTick = now
 
         let idle = IdleMonitor.idleSeconds()
-        let reason = context.currentPauseReason()
 
+        // `context.currentPauseReason()` is only called from the branches
+        // below that actually need it. For the `.focusing` phase - the vast
+        // majority of every cycle - that means the camera, mirroring,
+        // window-list and frontmost-app checks in ContextEngine only run once
+        // the focus interval is close to elapsed, instead of every tick for
+        // the full 20 minutes.
         switch phase {
         case .focusing:
-            advanceFocus(by: delta, idle: idle, reason: reason)
+            advanceFocus(by: delta, idle: idle)
 
         case .smartPaused:
             // Deliberately no natural-break check here. Idle time cannot tell
@@ -166,20 +209,20 @@ final class BreakEngine: ObservableObject {
             // break they genuinely earned; not resetting only risks one extra
             // break, which is the safer way to be wrong.
             focusElapsed += delta
-            if let reason {
-                phase = .smartPaused(reason)
+            if let reason = context.currentPauseReason() {
+                setPhase(.smartPaused(reason))
             } else {
                 resumeDeadline = now.addingTimeInterval(settings.postContextDelay)
-                phase = .waitingToResume
+                setPhase(.waitingToResume)
             }
 
         case .waitingToResume:
             focusElapsed += delta
-            if let reason {
-                phase = .smartPaused(reason)
+            if let reason = context.currentPauseReason() {
+                setPhase(.smartPaused(reason))
             } else if tookNaturalBreak(idle: idle) {
                 focusElapsed = 0
-                phase = .focusing
+                setPhase(.focusing)
             } else if now >= resumeDeadline {
                 offerBreak(at: now)
             }
@@ -188,8 +231,8 @@ final class BreakEngine: ObservableObject {
             // The offer sits on screen for a few seconds before starting on its
             // own. A call or presentation can begin inside that window, so this
             // has to keep checking rather than commit to interrupting.
-            if let reason {
-                phase = .smartPaused(reason)
+            if let reason = context.currentPauseReason() {
+                setPhase(.smartPaused(reason))
             } else if now.timeIntervalSince(breakDueSince) >= unattendedStartDelay {
                 beginBreak()
             }
@@ -198,24 +241,25 @@ final class BreakEngine: ObservableObject {
             // Same reasoning once the break is running: if a call starts, the
             // user needs their screen back now. Focus time is still owed, so
             // the break is re-offered when the call ends.
-            if let reason {
-                phase = .smartPaused(reason)
-                return
-            }
-            breakRemaining -= delta
-            if breakRemaining <= 0 {
-                breakRemaining = 0
-                finishBreak()
+            if let reason = context.currentPauseReason() {
+                setPhase(.smartPaused(reason))
+            } else {
+                breakRemaining -= delta
+                if breakRemaining <= 0 {
+                    breakRemaining = 0
+                    finishBreak()
+                }
             }
 
         case .complete:
             if now >= completeUntil {
-                phase = .focusing
+                setPhase(.focusing)
             }
         }
+        refreshIconState()
     }
 
-    private func advanceFocus(by delta: TimeInterval, idle: TimeInterval, reason: PauseReason?) {
+    private func advanceFocus(by delta: TimeInterval, idle: TimeInterval) {
         if tookNaturalBreak(idle: idle) {
             focusElapsed = 0
             return
@@ -227,8 +271,8 @@ final class BreakEngine: ObservableObject {
 
         guard focusElapsed >= settings.focusInterval else { return }
 
-        if let reason {
-            phase = .smartPaused(reason)
+        if let reason = context.currentPauseReason() {
+            setPhase(.smartPaused(reason))
         } else {
             offerBreak(at: Date())
         }
@@ -238,7 +282,7 @@ final class BreakEngine: ObservableObject {
         pickNextActivity()
         breakRemaining = settings.breakDuration
         breakDueSince = now
-        phase = .breakDue
+        setPhase(.breakDue)
     }
 
     private func tookNaturalBreak(idle: TimeInterval) -> Bool {
